@@ -1,0 +1,36 @@
+name: Release
+
+permissions:
+  contents: write
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Install rustup target
+        run: rustup target add ${{ matrix.target }}
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: Show the output
+        run: ls -l target/${{ matrix.target }}/release
+      - name: Rename the binary
+        run: mv target/${{ matrix.target }}/release/sjupdate target/${{ matrix.target }}/release/sjupdate-${{ matrix.target }}
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: target/${{ matrix.target }}/release/sjupdate-${{ matrix.target }}
