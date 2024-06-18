@@ -8,23 +8,48 @@ on:
     types: [published]
 
 jobs:
-  release:
-    name: release ${{ matrix.target }}
-    runs-on: ubuntu-latest
+  build:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-pc-windows-gnu
-            archive: zip
-          - target: x86_64-unknown-linux-musl
-            archive: tar.gz tar.xz tar.zst
+          - name: linux-x86_64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+
+    runs-on: ${{ matrix.os }}
+
     steps:
-      - uses: actions/checkout@master
-      - name: Compile and release
-        uses: rust-build/rust-build.action@v1.4.5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install rustup target
+        run: rustup target add ${{ matrix.target }}
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: Show the output
+        run: ls -l target/${{ matrix.target }}/release
+      - name: Compress the binary
+        working-directory: target/${{ matrix.target }}/release
+        run: tar -czf sjupdate-${{ matrix.target }}.tar.gz sjupdate
+      - name: Upload the artifact
+        uses: actions/upload-artifact@v4
         with:
-          RUSTTARGET: ${{ matrix.target }}
-          ARCHIVE_TYPES: ${{ matrix.archive }}
+          name: sjupdate-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/sjupdate-${{ matrix.target }}.tar.gz
+
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64-unknown-linux-gnu]
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sjupdate-${{ matrix.target }}
+      - name: Upload release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: sjupdate-${{ matrix.target }}.tar.gz
