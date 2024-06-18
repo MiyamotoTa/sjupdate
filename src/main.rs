@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::builder::PossibleValue;
+use clap::{Parser, ValueEnum};
 
 use crate::package_manifest::get_current_version;
 use crate::release::{convert_to_release, find_latest_release, Release};
@@ -22,6 +23,17 @@ struct Args {
     /// The path to the directory containing the package.json file. Must be relative to the project root.
     #[arg(short, long, default_value = ".")]
     directory: String,
+    /// The package manager to use. Supported values are "npm", "yarn", and "pnpm".
+    #[arg(short, long, default_value_t, value_enum)]
+    package_manager: PackageManager,
+}
+
+#[derive(Debug, Clone, ValueEnum, Default)]
+enum PackageManager {
+    #[default]
+    Npm,
+    Yarn,
+    Pnpm,
 }
 
 fn main() {
@@ -34,7 +46,11 @@ fn main() {
 fn run(args: Args) -> Result<()> {
     let latest_release = find_latest_release_from_feed(&args.url)?;
     if check_update_required(&latest_release, &args.directory)? {
-        install_latest_version(&latest_release.version.to_string(), &args.directory)?;
+        install_latest_version(
+            &latest_release.version.to_string(),
+            &args.directory,
+            &args.package_manager,
+        )?;
     }
 
     Ok(())
@@ -78,7 +94,11 @@ fn check_update_required(release: &Release, package_manifest_directory: &str) ->
     }
 }
 
-fn install_latest_version(latest_version: &str, directory: &str) -> Result<()> {
+fn install_latest_version(
+    latest_version: &str,
+    directory: &str,
+    package_manager: &PackageManager,
+) -> Result<()> {
     // The latest version URL is assumed to be in the format: https://cdn.sheetjs.com/xlsx-0.19.3/xlsx-0.19.3.tgz
     let latest_version_url = format!(
         "https://cdn.sheetjs.com/xlsx-{}/xlsx-{}.tgz",
@@ -89,6 +109,14 @@ fn install_latest_version(latest_version: &str, directory: &str) -> Result<()> {
         latest_version_url
     );
 
+    match package_manager {
+        PackageManager::Npm => install_latest_version_npm(&latest_version_url, directory),
+        PackageManager::Yarn => install_latest_version_yarn(&latest_version_url, directory),
+        PackageManager::Pnpm => install_latest_version_pnpm(&latest_version_url, directory),
+    }
+}
+
+fn install_latest_version_npm(latest_version_url: &str, directory: &str) -> Result<()> {
     // Run the npm rm command to uninstall the current version
     println!("Uninstalling the current version");
     let _ = std::process::Command::new("npm")
@@ -108,4 +136,80 @@ fn install_latest_version(latest_version: &str, directory: &str) -> Result<()> {
         .context("Failed to install the latest version")?;
 
     Ok(())
+}
+
+fn install_latest_version_pnpm(latest_version_url: &str, directory: &str) -> Result<()> {
+    // Run the pnpm remove command to uninstall the current version
+    println!("Uninstalling the current version");
+    let _ = std::process::Command::new("pnpm")
+        .arg("rm")
+        .arg("xlsx")
+        .current_dir(directory)
+        .output()
+        .context("Failed to uninstall the current version")?;
+
+    // Run the pnpm add command to install the latest version
+    println!("Installing the latest version");
+    let _ = std::process::Command::new("pnpm")
+        .arg("install")
+        .arg(latest_version_url)
+        .current_dir(directory)
+        .output()
+        .context("Failed to install the latest version")?;
+
+    Ok(())
+}
+
+fn install_latest_version_yarn(latest_version_url: &str, directory: &str) -> Result<()> {
+    // Run the yarn remove command to uninstall the current version
+    println!("Uninstalling the current version");
+    let _ = std::process::Command::new("yarn")
+        .arg("remove")
+        .arg("xlsx")
+        .current_dir(directory)
+        .output()
+        .context("Failed to uninstall the current version")?;
+
+    // Run the yarn add command to install the latest version
+    println!("Installing the latest version");
+    let _ = std::process::Command::new("yarn")
+        .arg("add")
+        .arg(latest_version_url)
+        .current_dir(directory)
+        .output()
+        .context("Failed to install the latest version")?;
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_package_manager_argument() {
+        // Test the possible values
+        assert_eq!(
+            PackageManager::value_variants(),
+            &[
+                PackageManager::Npm,
+                PackageManager::Yarn,
+                PackageManager::Pnpm,
+            ]
+        );
+
+        // Test the possible value
+        assert_eq!(
+            PackageManager::Npm.to_possible_value(),
+            Some(PossibleValue::new("npm"))
+        );
+        assert_eq!(
+            PackageManager::Yarn.to_possible_value(),
+            Some(PossibleValue::new("yarn"))
+        );
+        assert_eq!(
+            PackageManager::Pnpm.to_possible_value(),
+            Some(PossibleValue::new("pnpm"))
+        );
+    }
 }
