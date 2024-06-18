@@ -13,7 +13,11 @@ mod rss;
 #[command(version, about, long_about = None)]
 struct Args {
     /// RSS feed URL for the sheetjs releases
-    #[arg(short, long, default_value = "https://git.sheetjs.com/sheetjs/sheetjs/tags.rss")]
+    #[arg(
+        short,
+        long,
+        default_value = "https://git.sheetjs.com/sheetjs/sheetjs/tags.rss"
+    )]
     url: String,
     /// The path to the directory containing the package.json file. Must be relative to the project root.
     #[arg(short, long, default_value = ".")]
@@ -76,8 +80,14 @@ fn check_update_required(release: &Release, package_manifest_directory: &str) ->
 
 fn install_latest_version(latest_version: &str, directory: &str) -> Result<()> {
     // The latest version URL is assumed to be in the format: https://cdn.sheetjs.com/xlsx-0.19.3/xlsx-0.19.3.tgz
-    let latest_version_url = format!("https://cdn.sheetjs.com/xlsx-{}/xlsx-{}.tgz", latest_version, latest_version);
-    println!("Downloading the latest version from: {}", latest_version_url);
+    let latest_version_url = format!(
+        "https://cdn.sheetjs.com/xlsx-{}/xlsx-{}.tgz",
+        latest_version, latest_version
+    );
+    println!(
+        "Downloading the latest version from: {}",
+        latest_version_url
+    );
 
     // Run the npm rm command to uninstall the current version
     println!("Uninstalling the current version");
