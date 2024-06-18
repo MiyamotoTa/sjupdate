@@ -12,6 +12,9 @@ mod rss;
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]
 struct Args {
+    /// The command to run. Supported values are "release" and "update". The "release" command prints the latest version number to stdout. The "update" command updates the xlsx package to the latest version.
+    command: Command,
+
     /// RSS feed URL for the sheetjs releases
     #[arg(
         short,
@@ -25,6 +28,16 @@ struct Args {
     /// The package manager to use. Supported values are "npm", "yarn", and "pnpm".
     #[arg(short, long, default_value_t, value_enum)]
     package_manager: PackageManager,
+
+    /// Enable debug mode. Prints debug information to stdout.
+    #[arg(long, default_value_t = false)]
+    debug: bool,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, ValueEnum)]
+enum Command {
+    Release,
+    Update,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, ValueEnum, Default)]
@@ -43,50 +56,82 @@ fn main() {
 }
 
 fn run(args: Args) -> Result<()> {
-    let latest_release = find_latest_release_from_feed(&args.url)?;
-    if check_update_required(&latest_release, &args.directory)? {
-        install_latest_version(
-            &latest_release.version.to_string(),
-            &args.directory,
-            &args.package_manager,
-        )?;
+    let latest_release = find_latest_release_from_feed(&args.url, &args.debug)?;
+
+    match args.command {
+        Command::Release => {
+            println!("{}", latest_release.version);
+        }
+        Command::Update => {
+            if check_update_required(&latest_release, &args.directory, &args.debug)? {
+                install_latest_version(
+                    &latest_release.version.to_string(),
+                    &args.directory,
+                    &args.package_manager,
+                    &args.debug,
+                )?;
+            }
+        }
     }
 
     Ok(())
 }
 
-fn find_latest_release_from_feed(url: &str) -> Result<Release> {
-    println!("Fetching feed items from {}", url);
+fn find_latest_release_from_feed(url: &str, debug: &bool) -> Result<Release> {
+    if *debug {
+        println!("Fetching feed items from {}", url);
+    }
     let feed_items =
         get_feed_items(url).with_context(|| format!("Failed to get feed items from {}", url))?;
-    println!("Found {} feed items", feed_items.len());
+    if *debug {
+        println!("Found {} feed items", feed_items.len());
+    }
 
-    println!("Converting feed items to releases");
+    if *debug {
+        println!("Converting feed items to releases");
+    }
     let versions = convert_to_release(feed_items);
-    println!("Found {} releases", versions.len());
+    if *debug {
+        println!("Found {} releases", versions.len());
+    }
 
-    println!("Finding the latest release");
+    if *debug {
+        println!("Finding the latest release");
+    }
     let latest_release =
         find_latest_release(versions).with_context(|| "Failed to find the latest release")?;
-    println!("Latest release: {:?}", latest_release);
-
+    if *debug {
+        println!("Latest release: {:?}", latest_release);
+    }
     Ok(latest_release)
 }
 
-fn check_update_required(release: &Release, package_manifest_directory: &str) -> Result<bool> {
+fn check_update_required(
+    release: &Release,
+    package_manifest_directory: &str,
+    debug: &bool,
+) -> Result<bool> {
     match get_current_version(package_manifest_directory)? {
         None => {
-            println!("xlsx is not found in the package.json file");
+            if *debug {
+                println!("xlsx is not found in the package.json file");
+            }
             Ok(false)
         }
         Some(current_version) => {
-            println!("Current version: {:?}", current_version);
+            if *debug {
+                println!("Current version: {:?}", current_version);
+            }
             let latest_version = &release.version;
             if current_version < *latest_version {
-                println!("A new version is available: {}", latest_version);
+                if *debug {
+                    println!("A new version is available: {}", latest_version);
+                }
                 Ok(true)
             } else {
-                println!("The current version is up to date");
+                if *debug {
+                    println!("The current version is up to date");
+                }
                 Ok(false)
             }
         }
@@ -97,27 +142,36 @@ fn install_latest_version(
     latest_version: &str,
     directory: &str,
     package_manager: &PackageManager,
+    debug: &bool,
 ) -> Result<()> {
     // The latest version URL is assumed to be in the format: https://cdn.sheetjs.com/xlsx-0.19.3/xlsx-0.19.3.tgz
     let latest_version_url = format!(
         "https://cdn.sheetjs.com/xlsx-{}/xlsx-{}.tgz",
         latest_version, latest_version
     );
-    println!(
-        "Downloading the latest version from: {}",
-        latest_version_url
-    );
+    if *debug {
+        println!(
+            "Downloading the latest version from: {}",
+            latest_version_url
+        );
+    }
 
     match package_manager {
-        PackageManager::Npm => install_latest_version_npm(&latest_version_url, directory),
-        PackageManager::Yarn => install_latest_version_yarn(&latest_version_url, directory),
-        PackageManager::Pnpm => install_latest_version_pnpm(&latest_version_url, directory),
+        PackageManager::Npm => install_latest_version_npm(&latest_version_url, directory, debug),
+        PackageManager::Yarn => install_latest_version_yarn(&latest_version_url, directory, debug),
+        PackageManager::Pnpm => install_latest_version_pnpm(&latest_version_url, directory, debug),
     }
 }
 
-fn install_latest_version_npm(latest_version_url: &str, directory: &str) -> Result<()> {
+fn install_latest_version_npm(
+    latest_version_url: &str,
+    directory: &str,
+    debug: &bool,
+) -> Result<()> {
     // Run the npm rm command to uninstall the current version
-    println!("Uninstalling the current version");
+    if *debug {
+        println!("Uninstalling the current version");
+    }
     let _ = std::process::Command::new("npm")
         .arg("rm")
         .arg("xlsx")
@@ -126,7 +180,9 @@ fn install_latest_version_npm(latest_version_url: &str, directory: &str) -> Resu
         .context("Failed to uninstall the current version")?;
 
     // Run the npm install command to install the latest version
-    println!("Installing the latest version");
+    if *debug {
+        println!("Installing the latest version");
+    }
     let _ = std::process::Command::new("npm")
         .arg("install")
         .arg(latest_version_url)
@@ -137,9 +193,15 @@ fn install_latest_version_npm(latest_version_url: &str, directory: &str) -> Resu
     Ok(())
 }
 
-fn install_latest_version_pnpm(latest_version_url: &str, directory: &str) -> Result<()> {
+fn install_latest_version_pnpm(
+    latest_version_url: &str,
+    directory: &str,
+    debug: &bool,
+) -> Result<()> {
     // Run the pnpm remove command to uninstall the current version
-    println!("Uninstalling the current version");
+    if *debug {
+        println!("Uninstalling the current version");
+    }
     let _ = std::process::Command::new("pnpm")
         .arg("rm")
         .arg("xlsx")
@@ -148,7 +210,9 @@ fn install_latest_version_pnpm(latest_version_url: &str, directory: &str) -> Res
         .context("Failed to uninstall the current version")?;
 
     // Run the pnpm add command to install the latest version
-    println!("Installing the latest version");
+    if *debug {
+        println!("Installing the latest version");
+    }
     let _ = std::process::Command::new("pnpm")
         .arg("install")
         .arg(latest_version_url)
@@ -159,9 +223,15 @@ fn install_latest_version_pnpm(latest_version_url: &str, directory: &str) -> Res
     Ok(())
 }
 
-fn install_latest_version_yarn(latest_version_url: &str, directory: &str) -> Result<()> {
+fn install_latest_version_yarn(
+    latest_version_url: &str,
+    directory: &str,
+    debug: &bool,
+) -> Result<()> {
     // Run the yarn remove command to uninstall the current version
-    println!("Uninstalling the current version");
+    if *debug {
+        println!("Uninstalling the current version");
+    }
     let _ = std::process::Command::new("yarn")
         .arg("remove")
         .arg("xlsx")
@@ -170,7 +240,9 @@ fn install_latest_version_yarn(latest_version_url: &str, directory: &str) -> Res
         .context("Failed to uninstall the current version")?;
 
     // Run the yarn add command to install the latest version
-    println!("Installing the latest version");
+    if *debug {
+        println!("Installing the latest version");
+    }
     let _ = std::process::Command::new("yarn")
         .arg("add")
         .arg(latest_version_url)
