@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use clap::builder::PossibleValue;
 use clap::{Parser, ValueEnum};
 
 use crate::package_manifest::get_current_version;
@@ -28,7 +27,7 @@ struct Args {
     package_manager: PackageManager,
 }
 
-#[derive(Debug, Clone, ValueEnum, Default)]
+#[derive(Debug, Eq, PartialEq, Clone, ValueEnum, Default)]
 enum PackageManager {
     #[default]
     Npm,
@@ -185,6 +184,7 @@ fn install_latest_version_yarn(latest_version_url: &str, directory: &str) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::builder::PossibleValue;
 
     #[test]
     fn test_package_manager_argument() {
